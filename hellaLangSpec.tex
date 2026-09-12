@@ -1,0 +1,1480 @@
+% Hella Programming Language Specification
+% Source grammar: hella/references/ebnf-0.1.txt (Draft 0.2).
+\documentclass[makeidx]{article}
+\usepackage{xspace}
+\usepackage{epsfig}
+\usepackage{xcolor}
+\usepackage{syntax}
+\usepackage[fleqn]{amsmath}
+\usepackage{amssymb}
+\usepackage{semantic}
+\usepackage{hella}
+\usepackage[hidelinks]{hyperref}
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
+\usepackage{makeidx}
+\usepackage{tocloft}
+\makeindex
+\title{Hella Programming Language Specification\\
+{\large Draft 0.2 --- EBNF 0.1}}
+\author{Hassan Qasemi}
+
+\begin{document}
+\maketitle
+\setlength{\cftsubsecnumwidth}{2.7em}
+\setlength{\cftsubsubsecnumwidth}{3.4em}
+\tableofcontents
+\newpage
+\pagestyle{myheadings}
+\markright{Hella Programming Language Specification}
+
+\section{Scope}
+\LMLabel{ecmaScope}
+
+\LMHash{}%
+This standard specifies the syntax and semantics of
+the Hella programming language.
+It does not specify the APIs of the Hella libraries
+except where those library elements are essential to
+the correct functioning of the language itself.
+
+\section{Conformance}
+\LMLabel{ecmaConformance}
+
+\LMHash{}%
+A conforming implementation of the Hella programming language
+must provide and support all the APIs
+mandated in this specification.
+
+\LMHash{}%
+A conforming implementation is permitted to provide additional APIs,
+but not additional syntax,
+except for experimental features.
+
+\section{Normative References}
+\LMLabel{ecmaNormativeReferences}
+
+\LMHash{}%
+The following referenced documents are indispensable for
+the application of this document.
+\begin{enumerate}
+\item
+  The Unicode Standard, Version 5.0, as amended by Unicode 5.1.0, or successor.
+\end{enumerate}
+
+\section{Terms and Definitions}
+\LMLabel{ecmaTermsAndDefinitions}
+
+\LMHash{}%
+Terms and definitions used in this specification are given in
+the body of the specification proper.
+
+\section{Notation}
+\LMLabel{notation}
+
+\LMHash{}%
+We distinguish between normative and non-normative text.
+Normative text defines the rules of Hella.
+It is given in this font.
+At this time, non-normative text includes:
+
+\begin{itemize}
+\item[Rationale]
+  Discussion of the motivation for language design decisions appears in italics.
+\rationale{%
+  Distinguishing normative from non-normative helps clarify
+  what part of the text is binding and what part is merely expository.%
+}
+\item[Commentary]
+  Comments such as
+  ``\commentary{%
+    The careful reader will have noticed
+    that the name Hella has five characters%
+  }''
+  serve to illustrate or clarify the specification,
+  but are redundant with the normative text.
+\commentary{%
+  The difference between commentary and rationale can be subtle.%
+}
+\rationale{%
+  Commentary is more general than rationale,
+  and may include illustrative examples or clarifications.%
+}
+\end{itemize}
+
+\LMHash{}%
+Reserved words and built-in identifiers
+(\ref{identifierReference})
+appear in {\bf bold}.
+
+\commentary{%
+  Examples would be \CLASS{} or \MATCH.%
+}
+
+\LMHash{}%
+Grammar productions are given in a common variant of EBNF.
+The left hand side of a production ends with `\lit{::=}'.
+On the right hand side, alternation is represented by vertical bars,
+and sequencing by spacing.
+As in PEGs, alternation gives priority to the left.
+Optional elements of a production are suffixed by a question mark
+like so: \code{anElephant?}.
+Appending a star to an element of a production means
+it may be repeated zero or more times.
+Appending a plus sign to a production means it occurs one or more times.
+Parentheses are used for grouping.
+Negation is represented by prefixing an element of a production with a tilde.
+
+\commentary{%
+  An example would be:%
+}
+
+\begin{grammar}\color{commentaryColor}
+<aProduction> ::= <anAlternative>
+  \alt <anotherAlternative>
+  \alt <oneThing> <after> <another>
+  \alt <zeroOrMoreThings>*
+  \alt <oneOrMoreThings>+
+  \alt <anOptionalThing>?
+  \alt (<some> <grouped> <things>)
+  \alt \gtilde<notAThing>
+  \alt `aTerminal'
+  \alt <A\_LEXICAL\_THING>
+\end{grammar}
+
+\LMHash{}%
+Both syntactic and lexical productions are represented this way.
+Lexical productions are distinguished by their names.
+The names of lexical productions consist exclusively of
+upper case characters and underscores.
+As always, within grammatical productions,
+whitespace and comments between elements of the production
+are implicitly ignored unless stated otherwise.
+Punctuation tokens appear in quotes.
+
+\LMHash{}%
+Productions are embedded, as much as possible,
+in the discussion of the constructs they represent.
+
+\LMHash{}%
+A \Index{term} is a syntactic construct.
+It may be considered to be a piece of text which is derivable in the grammar,
+and it may be considered to be a tree created by such a derivation.
+An \Index{immediate subterm} of a given term $t$ is a syntactic construct
+which corresponds to an immediate subtree of $t$
+considered as a derivation tree.
+A \Index{subterm} of a given term $t$ is $t$,
+or an immediate subterm of $t$,
+or a subterm of an immediate subterm of $t$.
+
+\LMHash{}%
+A list \DefineSymbol{x_1, \ldots, x_n} denotes any list of
+$n$ elements of the form $x_i, 1 \le i \le n$.
+Note that $n$ may be zero, in which case the list is empty.
+We use such lists extensively throughout this specification.
+
+\BlindDefineSymbol{j, y_j, x_j}%
+\LMHash{}%
+Let further $y_j$ be an atomic syntactic entity (like an identifier),
+$x_j$ a composite syntactic entity (like an expression or a type),
+and \DefineSymbol{E} again a composite syntactic entity.
+
+\section{Overview}
+\LMLabel{overview}
+
+\LMHash{}%
+Hella is a statically typed, class-based language with structs, traits,
+enums, extensions, generics with \code{where} constraints, closures,
+pattern matching with \code{match}, ranges, nullable and pointer/slice
+type modifiers, fixed-size arrays (\code{arr}), growable vectors
+(\code{vec}), and \code{K:V} maps.
+Programs are organized as source files containing top-level declarations
+and optional module initialization blocks (\ref{sourceFiles},
+\ref{moduleInitialization}).
+
+\LMHash{}%
+Hella programs may be statically checked.
+Programs with compile-time errors do not have a specified dynamic semantics.
+This specification makes no attempt to answer additional questions
+about a library or program at the point
+where it is known to have a compile-time error.
+
+\commentary{%
+  Change log carried over from the source EBNF (Draft 0.2, Phase 5 fixes):
+  accessors public by default, separate \code{get}/\code{set} merging,
+  \code{open} class-only, omitted \code{Type} in \code{has} literals,
+  \code{|}/\code{or} alternative chains plus tuple-pattern \code{(a,b)}
+  in \code{match}, \code{arr}/\code{vec} type forms, array literals
+  \code{[1,2,3]}, empty \code{vec[]}, \code{K:V} map types plus
+  \code{has k: v end} map literals.%
+}
+
+\begin{hellaCode}
+\PUBLIC{} \INT{} add(\INT{} a, \INT{} b) \DO{} \RETURN{} a + b; \END{}
+\end{hellaCode}
+
+\section{Source Files}
+\LMLabel{sourceFiles}
+
+\LMHash{}%
+A Hella source file is a sequence of top-level declarations
+(\ref{topLevelDeclarations}) and module initialization blocks
+(\ref{moduleInitialization}).
+
+\begin{grammar}
+<sourceFile> ::= (<topLevelDeclaration> | <initBlock>)*
+\end{grammar}
+
+\section{Lexical Grammar}
+\LMLabel{lexicalGrammar}
+
+\LMHash{}%
+Hella source text is represented as a sequence of Unicode code points.
+This sequence is first converted into a sequence of tokens
+according to the lexical rules given in this specification.
+At any point in the tokenization process,
+the longest possible token is recognized.
+
+\begin{grammar}
+<identifier> ::= <IDENTIFIER\_START> <IDENTIFIER\_CONTINUE>*
+
+<IDENTIFIER\_START> ::= <LETTER> | `_'
+
+<IDENTIFIER\_CONTINUE> ::= <LETTER> | <DIGIT> | `_'
+
+<LETTER> ::= `a' .. `z' | `A' .. `Z'
+
+<DIGIT> ::= `0' .. `9'
+\end{grammar}
+
+\commentary{%
+  The EBNF source uses \code{identifier-start} and
+  \code{identifier-continue} with a single underscore terminal
+  (\code{"\_"}); the lexical rule above derives exactly those forms.%
+}
+
+\subsection{Reserved Words}
+\LMLabel{reservedWords}
+
+\LMHash{}%
+A \Index{reserved word} can only be used in the syntactic positions
+specified by the grammar.
+In particular, a \Error{compile-time error} occurs if a reserved word is used
+where an identifier is expected.
+Keywords are reserved and cannot be used as identifiers.
+
+\commentary{%
+  Note that reserved words occur bold and unquoted in grammar rules
+  (e.g., \CLASS{})
+  even though the consistent notation would use quotes
+  (e.g., \lit{class}).
+  This notational abuse occurs because we believe
+  it makes the grammar rules more readable.%
+}
+
+\begin{grammar}
+<KEYWORD> ::= \gnewline{}
+  \AND{} | \ANY{} | \ARR{} | \ASSERT{} | \BOOL{} | \BREAK{} | \CLASS{}
+  \alt\hspace{-3mm} \CONST{} | \CONTINUE{} | \DEBUGASSERT{} | \DEFER{}
+    | \DISTINCT{} | \DO{} | \DOUBLE{}
+  \alt\hspace{-3mm} \ELSE{} | \ENUM{} | \EXPLICIT{} | \EXTENDS{}
+    | \EXTERN{} | \FLOAT{} | \FOR{}
+  \alt\hspace{-3mm} \FUNCTION{} | \IF{} | \IMPLEMENTS{} | \IMPORT{}
+    | \IN{} | \INIT{} | \INT{}
+  \alt\hspace{-3mm} \IS{} | \LOOP{} | \MATCH{} | \NOT{} | \NULL{}
+    | \OPEN{} | \OPERATOR{}
+  \alt\hspace{-3mm} \OR{} | \OUT{} | \OVERRIDE{} | \PRIVATE{}
+    | \PUBLIC{} | \REF{} | \RETURN{}
+  \alt\hspace{-3mm} \SEALED{} | \STATIC{} | \STRING{} | \STRUCT{}
+    | \SUPER{} | \THIS{} | \TRAIT{}
+  \alt\hspace{-3mm} \TYPEDEF{} | \VOID{} | \VEC{} | \WHILE{} | \WHERE{}
+\end{grammar}
+
+\LMHash{}%
+In the grammar, the rule for reserved words above must occur
+before the rule for \synt{identifier}
+(\ref{identifierReference}).
+
+\commentary{%
+  The EBNF keyword list contains exactly 56 entries:
+  \code{and}, \code{any}, \code{arr}, \code{assert}, \code{bool},
+  \code{break}, \code{class}, \code{const}, \code{continue},
+  \code{debug\_assert}, \code{defer}, \code{distinct}, \code{do},
+  \code{double}, \code{else}, \code{enum}, \code{extends},
+  \code{explicit}, \code{extern}, \code{float}, \code{for},
+  \code{function}, \code{if}, \code{implements}, \code{import},
+  \code{in}, \code{init}, \code{int}, \code{is}, \code{loop},
+  \code{match}, \code{not}, \code{null}, \code{open}, \code{operator},
+  \code{or}, \code{out}, \code{override}, \code{private}, \code{public},
+  \code{ref}, \code{return}, \code{sealed}, \code{static}, \code{string},
+  \code{struct}, \code{super}, \code{this}, \code{trait}, \code{typedef},
+  \code{void}, \code{vec}, \code{while}, \code{where}.
+  The words \code{get}, \code{set}, \code{has}, \code{end},
+  \code{convert}, \code{to}, \code{extend}, \code{from},
+  \code{initialize} and \code{Self} are contextual, not reserved.%
+}
+
+\subsection{Comments and Whitespace}
+\LMLabel{comments}
+
+\LMHash{}%
+\IndexCustom{Comments}{comment}
+are sections of program text that are used for documentation.
+
+\begin{grammar}
+<LINE\_COMMENT> ::= \gnewline{}
+  `//' \gtilde(<LINE\_BREAK>)* (<LINE\_BREAK>)?
+
+<BLOCK\_COMMENT> ::= `/*' (<ANY\_CHARACTER>)* `*/'
+
+<COMMENT> ::= <LINE\_COMMENT> | <BLOCK\_COMMENT>
+
+<NEWLINE> ::= <LINE\_FEED> | <CARRIAGE\_RETURN\_LINE\_FEED>
+  \alt <CARRIAGE\_RETURN>
+
+<WHITESPACE> ::= ` ' | `\\t' | <COMMENT>
+\end{grammar}
+
+\LMHash{}%
+As always, within grammatical productions,
+whitespace and comments between elements of the production
+are implicitly ignored unless stated otherwise.
+The EBNF non-terminals \code{any-character-except-newline},
+\code{any-character}, \code{LF}, \code{CRLF} and \code{CR}
+are treated as primitive lexical tokens here.
+
+\section{Literals}
+\LMLabel{literals}
+
+\LMHash{}%
+A literal denotes a fixed value: a number, a character, a string,
+\TRUE{}, \FALSE{} or \NULL{}.
+
+\subsection{Integers}
+\LMLabel{integerLiterals}
+
+\LMHash{}%
+An \IndexCustom{integer literal}{literal!integer} is either a decimal,
+hexadecimal or binary numeral.
+Underscores may occur between digits for readability
+and carry no numeric meaning.
+
+\begin{grammar}
+<integerLiteral> ::= <decimalLiteral>
+  \alt <hexadecimalLiteral>
+  \alt <binaryLiteral>
+
+<decimalLiteral> ::= <DIGIT> (<DIGIT> | `_')*
+
+<hexadecimalLiteral> ::= `0x' <HEX\_DIGIT> (<HEX\_DIGIT> | `_')*
+
+<binaryLiteral> ::= `0b' <BINARY\_DIGIT> (<BINARY\_DIGIT> | `_')*
+
+<HEX\_DIGIT> ::= <DIGIT>
+  \alt `a' .. `f'
+  \alt `A' .. `F'
+
+<BINARY\_DIGIT> ::= `0' | `1'
+\end{grammar}
+
+\subsection{Floating Point Numbers}
+\LMLabel{floatingLiterals}
+
+\LMHash{}%
+A \IndexCustom{floating literal}{literal!floating} is a decimal numeral
+with a fractional part, an exponent, or both.
+
+\begin{grammar}
+<floatingLiteral> ::= <decimalLiteral> `.' <decimalLiteral> <EXPONENT>?
+  \alt <decimalLiteral> `.' <EXPONENT>?
+  \alt `.' <decimalLiteral> <EXPONENT>?
+  \alt <decimalLiteral> <EXPONENT>
+
+<EXPONENT> ::= (`e' | `E') (`+' | `-')? <decimalLiteral>
+\end{grammar}
+
+\subsection{Characters}
+\LMLabel{characterLiterals}
+
+\LMHash{}%
+A \IndexCustom{character literal}{literal!character} is a single character
+or escape sequence enclosed in single quotes.
+
+\begin{grammar}
+<characterLiteral> ::= `\sq' <characterContent> `\sq'
+
+<characterContent> ::= <CHARACTER>
+  \alt <escapeSequence>
+\end{grammar}
+
+\subsection{Strings}
+\LMLabel{stringLiterals}
+
+\LMHash{}%
+A \Index{string literal} is a normal string, a multiline string,
+or a raw string.
+Normal and multiline strings support escape sequences
+and interpolation of the form \code{\${expression\}}.
+In a raw string no escapes or interpolations are processed.
+
+\begin{grammar}
+<stringLiteral> ::= <normalString>
+  \alt <multilineString>
+  \alt <rawString>
+
+<normalString> ::= `"' (<stringCharacter> | <escapeSequence>
+  \gnewline{} | <interpolation>)* `"'
+
+<multilineString> ::= `"""' (<multilineCharacter> | <escapeSequence>
+  \gnewline{} | <interpolation>)* `"""'
+
+<rawString> ::= `r' `"' <RAW\_STRING\_CHARACTER>* `"'
+
+<escapeSequence> ::= `\\' `n'
+  \alt `\\' `r'
+  \alt `\\' `t'
+  \alt `\\' `b'
+  \alt `\\' `f'
+  \alt `\\' `0'
+  \alt `\\' `\\'
+  \alt `\\' `"'
+  \alt `\\' `\sq'
+  \alt `\\' `x' <HEX\_DIGIT> <HEX\_DIGIT>
+  \alt `\\' `u' <HEX\_DIGIT> <HEX\_DIGIT> <HEX\_DIGIT> <HEX\_DIGIT>
+
+<interpolation> ::= `${' <expression> `}'
+
+<stringCharacter> ::= <STRING\_CHARACTER>
+
+<multilineCharacter> ::= <MULTILINE\_CHARACTER>
+
+<escapedBrace> ::= `{{' | `}}'
+\end{grammar}
+
+\commentary{%
+  The EBNF escape rule lists \code{"\\n"} through
+  \code{"\\u" + 4 hex digits}; the single-quote escape is rendered above as
+  a backslash terminal followed by \code{\sq}, because a raw quote would
+  terminate the terminal.%
+}
+
+\section{Operators}
+\LMLabel{operatorsLexicon}
+
+\LMHash{}%
+The table below lists every operator token of Hella.
+Their meaning in expression positions is specified in
+\ref{expressions}; user-defined overloads are specified in
+\ref{operatorDeclarations}.
+
+\begin{grammar}
+<operator> ::= `+'
+  \alt `-'
+  \alt `*'
+  \alt `/'
+  \alt `\%'
+  \alt `<'
+  \alt `<='
+  \alt `>'
+  \alt `>='
+  \alt \IS{} | `is' `not'
+  \alt \AND{} | \OR{} | \NOT{}
+  \alt `\&'
+  \alt `|'
+  \alt `^'
+  \alt `~'
+  \alt `\ltlt'
+  \alt `\gtgt'
+  \alt `='
+  \alt `+=' | `-=' | `*=' | `/=' | `\%='
+  \alt `\&=' | `|=' | `^=' | `\ltlt=' | `\gtgt='
+  \alt `++' | `--'
+  \alt `?'
+  \alt `:'
+  \alt `??'
+  \alt `?.'
+  \alt `..'
+  \alt `..='
+\end{grammar}
+
+\section{Types}
+\LMLabel{types}
+
+\LMHash{}%
+A \Index{type} is a primary type followed by zero or more modifiers.
+The modifiers are nullability (\code{?}), pointer (\code{*})
+and slice/array view (\code{[]} ).
+
+\begin{grammar}
+<type> ::= <primaryType> <typeModifier>*
+
+<primaryType> ::= <primitiveType>
+  \alt <namedType>
+  \alt <genericType>
+  \alt <functionType>
+  \alt <tupleType>
+  \alt <anyType>
+  \alt <fixedArrayType>
+  \alt <vectorType>
+  \alt <mapType>
+  \alt <parenthesizedType>
+
+<primitiveType> ::= \INT{} | \BOOL{} | \FLOAT{} | \DOUBLE{}
+  \alt \code{char} | \STRING{} | \VOID{}
+
+<anyType> ::= \ANY{}
+
+<namedType> ::= <qualifiedName>
+
+<qualifiedName> ::= <identifier> (`::' <identifier>)*
+
+<genericType> ::= <qualifiedName> `<' <typeArguments> `>'
+
+<typeArguments> ::= <type> (`,' <type>)*
+
+<functionType> ::= \FUNCTION{} `<' <type>? `(' <typeList>? `)' `>'
+
+<typeList> ::= <type> (`,' <type>)*
+
+<tupleType> ::= `'(' (<type> (`,' <type>)* `,'?)? `')'
+
+<parenthesizedType> ::= `'(' <type> `')'
+
+<typeModifier> ::= `?'
+  \alt `*'
+  \alt `[' `]'
+\end{grammar}
+
+\LMHash{}%
+\code{arr} is a compiler keyword for fixed-size arrays (element type
+precedes it). Inferred size takes the initializer length; explicit
+size is zero-initialized and fixed for the array's lifetime.
+
+\begin{grammar}
+<fixedArrayType> ::= <type> \ARR{} (`[' <integerLiteral> `]')?
+\end{grammar}
+
+\LMHash{}%
+\code{vec} is a compiler keyword for owning, growable vectors (element
+type precedes it). Empty vectors come from the \code{vec[]} expression
+with an undetermined element type until the first \code{push}.
+
+\begin{grammar}
+<vectorType> ::= <type> \VEC{}
+\end{grammar}
+
+\LMHash{}%
+There is no \code{map} keyword. Map types use \code{KEY\_TYPE:VALUE\_TYPE}.
+The \code{:} operator is distinct from \code{::} (qualified names) and
+from the \code{where} constraint colon.
+\code{string:int[]} is a map to an array.
+
+\begin{grammar}
+<mapType> ::= <type> `:' <type>
+\end{grammar}
+
+\commentary{%
+  The EBNF grammar is ambiguous between a parenthesized type and a
+  one-element tuple type. As in PEGs, alternation gives priority to the
+  left, so \synt{functionType} is tried before \synt{tupleType}, and
+  \synt{mapType} binds through both operand types.%
+}
+
+\section{Generic Parameters and Constraints}
+\LMLabel{genericParameters}
+
+\LMHash{}%
+Generic declarations may declare type parameters with optional bounds,
+and functions may declare an additional \code{where} clause with
+further constraints written \code{T: Bound1, Bound2}.
+
+\begin{grammar}
+<genericParameters> ::= `<' <genericParameter> (`,' <genericParameter>)* `>'
+
+<genericParameter> ::= <identifier> (`:' <constraintList>)?
+
+<constraintList> ::= <type> (`,' <type>)*
+
+<whereClause> ::= \WHERE{} <whereConstraint> <whereConstraint>*
+
+<whereConstraint> ::= <type> `:' <constraintList>
+\end{grammar}
+
+\section{Expressions}
+\LMLabel{expressions}
+
+\LMHash{}%
+An \Index{expression} is an assignment expression.
+Operator precedence rises from assignment (lowest) through conditional,
+null-coalescing, logical (\code{or}, \code{and}), bitwise
+(\code{|}, \code{\^}, \code{\&}), equality (\code{is}, \code{is not}),
+relational, shift, additive and multiplicative (highest),
+ending in unary and postfix forms.
+
+\begin{grammar}
+<expression> ::= <assignmentExpression>
+
+<assignmentExpression> ::= <conditionalExpression>
+  \alt <unaryExpression> <assignmentOperator> <assignmentExpression>
+
+<assignmentOperator> ::= `='
+  \alt `+=' | `-=' | `*=' | `/=' | `\%='
+  \alt `\&=' | `|=' | `^=' | `\ltlt=' | `\gtgt='
+
+<conditionalExpression> ::= <nullCoalescingExpression>
+  \alt <nullCoalescingExpression> `?' <expression> `:' <conditionalExpression>
+
+<nullCoalescingExpression> ::= <logicalOrExpression>
+  \alt <logicalOrExpression> `??' <nullCoalescingExpression>
+
+<logicalOrExpression> ::= <logicalAndExpression>
+  \alt <logicalOrExpression> \OR{} <logicalAndExpression>
+
+<logicalAndExpression> ::= <bitwiseOrExpression>
+  \alt <logicalAndExpression> \AND{} <bitwiseOrExpression>
+
+<bitwiseOrExpression> ::= <bitwiseXorExpression>
+  \alt <bitwiseOrExpression> `|' <bitwiseXorExpression>
+
+<bitwiseXorExpression> ::= <bitwiseAndExpression>
+  \alt <bitwiseXorExpression> `^' <bitwiseAndExpression>
+
+<bitwiseAndExpression> ::= <equalityExpression>
+  \alt <bitwiseAndExpression> `\&' <equalityExpression>
+
+<equalityExpression> ::= <relationalExpression>
+  \alt <equalityExpression> <equalityOperator> <relationalExpression>
+
+<equalityOperator> ::= \IS{} | `is' `not'
+
+<relationalExpression> ::= <shiftExpression>
+  \alt <relationalExpression> <relationalOperator> <shiftExpression>
+
+<relationalOperator> ::= `<'
+  \alt `<='
+  \alt `>'
+  \alt `>='
+
+<shiftExpression> ::= <additiveExpression>
+  \alt <shiftExpression> <shiftOperator> <additiveExpression>
+
+<shiftOperator> ::= `\ltlt'
+  \alt `\gtgt'
+
+<additiveExpression> ::= <multiplicativeExpression>
+  \alt <additiveExpression> <additiveOperator> <multiplicativeExpression>
+
+<additiveOperator> ::= `+'
+  \alt `-'
+
+<multiplicativeExpression> ::= <unaryExpression>
+  \alt <multiplicativeExpression> <multiplicativeOperator> <unaryExpression>
+
+<multiplicativeOperator> ::= `*'
+  \alt `/'
+  \alt `\%'
+
+<unaryExpression> ::= <unaryOperator> <unaryExpression>
+  \alt <postfixExpression>
+
+<unaryOperator> ::= `++' | `--' | `+' | `-' | `~' | \NOT{}
+\end{grammar}
+
+\subsection{Postfix and Primary Expressions}
+\LMLabel{postfixExpressions}
+
+\LMHash{}%
+Postfix operations (calls, indexing, member access, nullable member
+access and post-increment/decrement) bind tightest after primary
+forms. A call may pass positional arguments, named arguments
+(\code{name: expression}), and \code{out}/\code{ref} arguments.
+Indexing selects an element or a range (\code{..}, \code{..=}).
+
+\begin{grammar}
+<postfixExpression> ::= <primaryExpression> <postfixOperation>*
+
+<postfixOperation> ::= <callExpression>
+  \alt <indexExpression>
+  \alt <memberAccess>
+  \alt <nullableMemberAccess>
+  \alt <postfixIncrement>
+  \alt <postfixDecrement>
+
+<callExpression> ::= `(' <argumentList>? `)'
+
+<argumentList> ::= <argument> (`,' <argument>)*
+
+<argument> ::= <expression>
+  \alt <namedArgument>
+  \alt \OUT{} <type>? <identifier>
+  \alt \REF{} <expression>
+
+<namedArgument> ::= <identifier> `:' <expression>
+
+<indexExpression> ::= `[' <indexOrRange> `]'
+
+<indexOrRange> ::= <expression>
+  \alt <rangeExpression>
+  \alt <expression>? <rangeOperator> <expression>?
+
+<rangeExpression> ::= <expression> <rangeOperator> <expression>
+
+<rangeOperator> ::= `..' | `..='
+
+<memberAccess> ::= `.' <identifier>
+
+<nullableMemberAccess> ::= `?.' <identifier>
+
+<postfixIncrement> ::= `++'
+
+<postfixDecrement> ::= `--'
+\end{grammar}
+
+\begin{grammar}
+<primaryExpression> ::= <literal>
+  \alt <identifierExpression>
+  \alt <qualifiedExpression>
+  \alt \THIS{} | \SUPER{}
+  \alt <closureExpression>
+  \alt <matchExpression>
+  \alt <structExpression>
+  \alt <enumVariantExpression>
+  \alt <tupleExpression>
+  \alt <arrayLiteral>
+  \alt <emptyVector>
+  \alt <mapLiteral>
+  \alt <parenthesizedExpression>
+
+<identifierExpression> ::= <identifier>
+
+<qualifiedExpression> ::= <qualifiedName>
+
+<literal> ::= <integerLiteral>
+  \alt <floatingLiteral>
+  \alt <characterLiteral>
+  \alt <stringLiteral>
+  \alt `true' | `false' | \NULL{}
+
+<parenthesizedExpression> ::= `(' <expression> `)'
+
+<tupleExpression> ::= `(' (<expression> (`,' <expression>)* `,'?)? `)'
+\end{grammar}
+
+\subsection{Collection Literals}
+\LMLabel{collectionLiterals}
+
+\LMHash{}%
+An array literal is the initializer for a \code{TYPE arr} fixed-size
+array (size inferred from the element count). All elements must be
+compatible with the element type.
+
+\begin{grammar}
+<arrayLiteral> ::= `[' (<expression> (`,' <expression>)*)? `]'
+\end{grammar}
+
+\LMHash{}%
+The empty vector \code{vec[]} has no element type until the first
+\code{push} establishes it permanently (for example,
+\code{any xs = vec[]} takes its element type from the first push).
+
+\begin{grammar}
+<emptyVector> ::= \VEC{} `[' `]'
+\end{grammar}
+
+\LMHash{}%
+A map literal holds \code{key: value} entries inside a \code{has}
+block for a \code{KEY:VALUE} type. Entries may be written multiline
+or compact (\code{has "a": 1, "b": 2 end}); the declared type may
+be omitted for \code{any} (inferred from the first entry). Keys must
+be \code{string} or int types; both sides are type-checked.
+
+\begin{grammar}
+<mapLiteral> ::= <type>? \HAS{} <mapEntry>* \END{}
+
+<mapEntry> ::= <expression> `:' <expression> `,'? <statementTerminator>
+\end{grammar}
+
+\section{Closures}
+\LMLabel{closures}
+
+\LMHash{}%
+A closure abstracts over a parameter list and a body.
+The body is either a single expression after \code{=>}
+or a block.
+
+\begin{grammar}
+<closureExpression> ::= `|' <closureParameters>? `|' <closureBody>
+
+<closureParameters> ::= <closureParameter> (`,' <closureParameter>)*
+
+<closureParameter> ::= <identifier>
+  \alt <type> <identifier>
+
+<closureBody> ::= `=>' <expression>
+  \alt <block>
+\end{grammar}
+
+\section{Match}
+\LMLabel{matchExpressions}
+
+\LMHash{}%
+A match expression scrutinizes a value against a sequence of arms.
+Each arm pairs a pattern with an optional \code{if} guard and a body
+which is either an expression or a block.
+The match statement (\ref{matchStatement}) shares the same arm grammar.
+
+\begin{grammar}
+<matchExpression> ::= \MATCH{} <expression> \DO{} <matchArm>* \END{}
+
+<matchArm> ::= <pattern> <guard>? `->' <matchArmBody>
+
+<matchArmBody> ::= <expression>
+  \alt <block>
+
+<guard> ::= \IF{} <expression>
+\end{grammar}
+
+\LMHash{}%
+A pattern is an alternative chain of primary patterns separated by
+\code{|} or its keyword alias \code{or} (\code{1 | 2} is equivalent
+to \code{1 or 2}).
+
+\begin{grammar}
+<pattern> ::= <patternAlternative>
+
+<patternAlternative> ::= <patternPrimary> ((`|' | \OR{}) <patternPrimary>)*
+
+<patternPrimary> ::= `_'
+  \alt <literal>
+  \alt <identifier>
+  \alt <enumPattern>
+  \alt <tuplePattern>
+
+<enumPattern> ::= `.' <identifier> (`(' <patternList>? `)')?
+  \alt <qualifiedName> `.' <identifier> (`(' <patternList>? `)')?
+  \alt <identifier> `(' <patternList>? `)'
+
+<patternList> ::= <pattern> (`,' <pattern>)*
+
+<tuplePattern> ::= `(' <pattern> (`,' <pattern>)* `,'? `)'
+\end{grammar}
+
+\section{Struct Construction}
+\LMLabel{structConstruction}
+
+\LMHash{}%
+A struct expression initializes a struct (or constructor-less class)
+with a \code{has} block of field assignments.
+The leading type may be omitted when the expression appears as the
+initializer of a variable declaration whose declared type is a struct
+or constructor-less class (not \code{any}). In
+\code{User u2 = has name = "bbb" end} the second \code{has} infers
+\code{User}.
+
+\begin{grammar}
+<structExpression> ::= <type>? \HAS{} <structFieldInitializer>* \END{}
+
+<structFieldInitializer> ::= <identifier> `=' <expression> <statementTerminator>
+\end{grammar}
+
+\section{Enum Variant Construction}
+\LMLabel{enumVariants}
+
+\LMHash{}%
+An enum variant is named with a leading dot, optionally applied to
+arguments, optionally qualified by the enum type name.
+
+\begin{grammar}
+<enumVariantExpression> ::= `.' <identifier>
+  \alt `.' <identifier> `(' <argumentList>? `)'
+  \alt <qualifiedName> `.' <identifier>
+  \alt <qualifiedName> `.' <identifier> `(' <argumentList>? `)'
+\end{grammar}
+
+\section{Statements}
+\LMLabel{statements}
+
+\LMHash{}%
+A statement is an expression statement, a declaration, a control-flow
+statement, an assertion, or a block.
+A statement terminator is a newline or a semicolon.
+
+\begin{grammar}
+<statement> ::= <expressionStatement>
+  \alt <variableDeclaration>
+  \alt <constantDeclaration>
+  \alt <destructuringDeclaration>
+  \alt <destructuringAssignment>
+  \alt <ifStatement>
+  \alt <matchStatement>
+  \alt <whileStatement>
+  \alt <loopStatement>
+  \alt <forStatement>
+  \alt <breakStatement>
+  \alt <continueStatement>
+  \alt <returnStatement>
+  \alt <deferStatement>
+  \alt <assertStatement>
+  \alt <block>
+
+<expressionStatement> ::= <expression> <statementTerminator>
+
+<statementTerminator> ::= <NEWLINE>
+  \alt `;'
+
+<block> ::= \DO{} <statement>* \END{}
+\end{grammar}
+
+\section{Variable Declarations}
+\LMLabel{variableDeclarations}
+
+\LMHash{}%
+A variable declaration optionally carries a visibility modifier
+(\ref{modules}), a type, a name, and an optional initializer.
+A constant declaration uses \code{const} with an optional type.
+Destructuring binds several names (or discards with \code{\_})
+from a single right-hand side.
+
+\begin{grammar}
+<variableDeclaration> ::= <visibilityModifier>? <type> <identifier>
+  \gnewline{} (`=' <expression>)? <statementTerminator>
+
+<constantDeclaration> ::= <visibilityModifier>? \CONST{} <type>? <identifier>
+  \gnewline{} `=' <expression> <statementTerminator>
+
+<destructuringDeclaration> ::= <destructuringTarget>
+  \gnewline{} `=' <expression> <statementTerminator>
+
+<destructuringTarget> ::= <identifier> (`,' (<identifier> | `_'))*
+
+<destructuringAssignment> ::= <destructuringTarget>
+  \gnewline{} `=' <expression> <statementTerminator>
+\end{grammar}
+
+\section{Conditionals}
+\LMLabel{conditionals}
+
+\LMHash{}%
+An if statement evaluates its condition and executes the matching block.
+Parentheses around conditions are optional, and any number of
+\code{else if} branches may precede a final \code{else} block.
+
+\begin{grammar}
+<ifStatement> ::= \IF{} (`(')? <expression> (`)')? <block>
+  \gnewline{} (\ELSE{} \IF{} (`(')? <expression> (`)')? <block>)*
+  \gnewline{} (\ELSE{} <block>)?
+\end{grammar}
+
+\section{Match Statement}
+\LMLabel{matchStatement}
+
+\LMHash{}%
+A match statement has the same form as a match expression
+(\ref{matchExpressions}) but executes arm bodies as statements.
+
+\begin{grammar}
+<matchStatement> ::= \MATCH{} <expression> \DO{} <matchArm>* \END{}
+\end{grammar}
+
+\section{Loops}
+\LMLabel{loops}
+
+\LMHash{}%
+A while loop takes an optionally parenthesized condition.
+A loop is optionally labeled and executes its block repeatedly.
+A for loop iterates over an expression: \code{for x in arr} binds
+elements and \code{for x, i in arr} also binds the index. Over maps,
+\code{for k in m} binds keys and \code{for k, v in m} binds
+key/value pairs.
+
+\begin{grammar}
+<whileStatement> ::= \WHILE{} (`(')? <expression> (`)')? <block>
+
+<loopStatement> ::= <loopLabel>? \LOOP{} <block>
+
+<forStatement> ::= <loopLabel>? \FOR{} <identifier> (`,' <identifier>)?
+  \gnewline{} \IN{} <expression> <block>
+
+<loopLabel> ::= <identifier> `:'
+
+<breakStatement> ::= \BREAK{} <identifier>? <statementTerminator>
+
+<continueStatement> ::= \CONTINUE{} <identifier>? <statementTerminator>
+\end{grammar}
+
+\section{Return}
+\LMLabel{returnStatement}
+
+\LMHash{}%
+A return statement optionally carries a value.
+
+\begin{grammar}
+<returnStatement> ::= \RETURN{} <expression>? <statementTerminator>
+\end{grammar}
+
+\section{Defer}
+\LMLabel{deferStatement}
+
+\LMHash{}%
+A defer statement runs its expression or block when the enclosing
+scope exits.
+
+\begin{grammar}
+<deferStatement> ::= \DEFER{} (<expression> <statementTerminator> | <block>)
+\end{grammar}
+
+\section{Assertions}
+\LMLabel{assertions}
+
+\LMHash{}%
+An assertion checks its condition, with an optional message.
+\code{debug\_assert} is only checked in debug builds.
+
+\begin{grammar}
+<assertStatement> ::= \ASSERT{} <expression> (`,' <expression>)?
+  \gnewline{} <statementTerminator>
+  \alt \DEBUGASSERT{} <expression> (`,' <expression>)?
+  \gnewline{} <statementTerminator>
+\end{grammar}
+
+\section{Functions}
+\LMLabel{functions}
+
+\LMHash{}%
+A function declaration carries an optional visibility modifier,
+optional \code{static}, \code{sealed} and \code{override} modifiers,
+a return type, a name, optional generic parameters, a parameter list,
+an optional \code{where} clause, and a body which is either a block
+or an \code{initialize} stub.
+
+\begin{grammar}
+<functionDeclaration> ::= <visibilityModifier>? \STATIC{}? \SEALED{}?
+  \gnewline{} \OVERRIDE{}? <type> <identifier> <genericParameters>?
+  \gnewline{} `(' <parameterList>? `)' <whereClause>? <functionBody>
+
+<functionBody> ::= <block>
+  \alt \INITIALIZE{} <statementTerminator>
+
+<parameterList> ::= <parameter> (`,' <parameter>)*
+
+<parameter> ::= `...' ? <parameterMode>? <type>? <identifier>
+  \gnewline{} (`=' <expression>)?
+
+<parameterMode> ::= \REF{}
+  \alt \OUT{}
+
+<variadicMarker> ::= `...'
+\end{grammar}
+
+\commentary{%
+  \code{...} marks variadic parameters: \code{...int vda} yields
+  \code{vda: int[]}, \code{...T vda} yields \code{vda: T[]} with a
+  \code{where T: Trait} bound allowed, and bare \code{... vda} (no type)
+  derives \code{vda: prev\_type[]} from the previous type and must be last;
+  \code{...} may appear anywhere when an explicit type is present, e.g.
+  \code{log(string fmt, ...string vda, bool cond)}.%
+}
+
+\section{Classes}
+\LMLabel{classes}
+
+\LMHash{}%
+\code{open} is only for \code{class} (it enables \code{extend});
+methods use \code{static}/\code{sealed}/\code{override} but never
+\code{open}: \code{open int bar()} is rejected. Constructors and
+\code{get}/\code{set} accessors are \code{public} by default; other
+members are \code{private} unless marked \code{public}.
+
+\begin{grammar}
+<classDeclaration> ::= <visibilityModifier>? \OPEN{}? \CLASS{} <identifier>
+  \gnewline{} <genericParameters>? (\EXTENDS{} <type>)?
+  \gnewline{} (\IMPLEMENTS{} <traitList>)? \HAS{} <classMember>* \END{}
+
+<traitList> ::= <type> (`,' <type>)*
+
+<classMember> ::= <fieldDeclaration>
+  \alt <functionDeclaration>
+  \alt <constructorDeclaration>
+  \alt <destructorDeclaration>
+  \alt <propertyDeclaration>
+  \alt <operatorDeclaration>
+  \alt <conversionDeclaration>
+  \alt <constantDeclaration>
+
+<fieldDeclaration> ::= <visibilityModifier>? <type> <identifier>
+  \gnewline{} (`=' <expression>)? <statementTerminator>
+
+<constructorDeclaration> ::= <visibilityModifier>? <identifier>
+  \gnewline{} `(' <parameterList>? `)' \INITIALIZE{} <block>?
+
+<destructorDeclaration> ::= <visibilityModifier>? `~' <identifier>
+  \gnewline{} `(' `)' <block>
+\end{grammar}
+
+\section{Properties}
+\LMLabel{properties}
+
+\LMHash{}%
+\code{get}/\code{set} are \code{public} by default (overriding the
+class \code{private} default). Two property declarations with the same
+name in one class merge if they supply complementary accessors:
+\code{int x get ... end} plus \code{int x set(int v) ... end} becomes
+one property.
+
+\begin{grammar}
+<propertyDeclaration> ::= <visibilityModifier>? <type>? <identifier>
+  \gnewline{} <propertyGetter> <propertySetter>?
+  \alt <visibilityModifier>? <type>? <identifier>
+  \gnewline{} <propertySetter> <propertyGetter>?
+
+<propertyGetter> ::= \GET{} <block>
+
+<propertySetter> ::= \SET{} `(' <parameter> `)' <block>
+\end{grammar}
+
+\section{Structs}
+\LMLabel{structs}
+
+\LMHash{}%
+A struct declaration groups typed fields in a \code{has} block.
+
+\begin{grammar}
+<structDeclaration> ::= <visibilityModifier>? \STRUCT{} <identifier>
+  \gnewline{} <genericParameters>? \HAS{} <structMember>* \END{}
+
+<structMember> ::= <visibilityModifier>? <type> <identifier>
+  \gnewline{} (`=' <expression>)? <statementTerminator>
+\end{grammar}
+
+\section{Traits}
+\LMLabel{traits}
+
+\LMHash{}%
+A trait declaration groups function signatures in a \code{has} block.
+
+\begin{grammar}
+<traitDeclaration> ::= <visibilityModifier>? \TRAIT{} <identifier>
+  \gnewline{} <genericParameters>? \HAS{} <traitMember>* \END{}
+
+<traitMember> ::= <functionSignature>
+
+<functionSignature> ::= \SEALED{}? <type> <identifier>
+  \gnewline{} <genericParameters>? `(' <parameterList>? `)'
+  \gnewline{} <whereClause>? <statementTerminator>
+\end{grammar}
+
+\section{Operator Declarations}
+\LMLabel{operatorDeclarations}
+
+\LMHash{}%
+An operator declaration overloads one of the operator symbols below for
+a type. Indexing overloads use \code{[]} (no \code{[]=} symbol here;
+assignment forms live in expression grammar).
+
+\begin{grammar}
+<operatorDeclaration> ::= <visibilityModifier>? \STATIC{}? \OPERATOR{}
+  \gnewline{} <operatorSymbol> `(' <parameterList>? `)'
+  \gnewline{} <whereClause>? <block>
+
+<operatorSymbol> ::= `+'
+  \alt `-'
+  \alt `*'
+  \alt `/'
+  \alt `\%'
+  \alt `<'
+  \alt `<='
+  \alt `>'
+  \alt `>='
+  \alt \IS{} | `is' `not'
+  \alt `\&'
+  \alt `|'
+  \alt `^'
+  \alt `~'
+  \alt `\ltlt'
+  \alt `\gtgt'
+  \alt `='
+  \alt `+=' | `-=' | `*=' | `/=' | `\%='
+  \alt `\&=' | `|=' | `^=' | `\ltlt=' | `\gtgt='
+  \alt `++' | `--'
+  \alt `[' `]'
+\end{grammar}
+
+\section{Conversions}
+\LMLabel{conversions}
+
+\LMHash{}%
+A conversion declaration defines a (possibly \code{explicit})
+conversion from one type to another.
+
+\begin{grammar}
+<conversionDeclaration> ::= <visibilityModifier>? \EXPLICIT{}? \CONVERT{}
+  \gnewline{} <type> \TO{} <type> <block>
+\end{grammar}
+
+\section{Enums}
+\LMLabel{enums}
+
+\LMHash{}%
+An enum declaration groups variants in a \code{has} block.
+Each variant optionally carries a discriminant value and an optional
+parameter list for associated data.
+
+\begin{grammar}
+<enumDeclaration> ::= <visibilityModifier>? \ENUM{} <identifier>
+  \gnewline{} <genericParameters>? \HAS{} <enumVariant>* \END{}
+
+<enumVariant> ::= <identifier> (`=' <expression>)?
+  \gnewline{} (`(' <parameterList>? `)')? <statementTerminator>
+\end{grammar}
+
+\section{Type Aliases}
+\LMLabel{typeAliases}
+
+\LMHash{}%
+A type alias introduces a name for a type, with optional generic
+parameters.
+
+\begin{grammar}
+<typedefDeclaration> ::= <visibilityModifier>? \TYPEDEF{}
+  \gnewline{} <genericParameters>? <identifier> `=' <type> <statementTerminator>
+\end{grammar}
+
+\section{Distinct Types}
+\LMLabel{distinctTypes}
+
+\LMHash{}%
+A distinct type introduces a new nominal type with the representation
+of its aliased type.
+
+\begin{grammar}
+<distinctDeclaration> ::= <visibilityModifier>? \DISTINCT{} <identifier>
+  \gnewline{} <genericParameters>? `=' <type> <statementTerminator>
+\end{grammar}
+
+\section{Extensions}
+\LMLabel{extensions}
+
+\LMHash{}%
+Extension members are public by default: an absent visibility modifier
+normalizes to \code{public} when merged into the target type.
+An explicit \code{private} is kept and still enforced.
+
+\begin{grammar}
+<extensionDeclaration> ::= \EXTEND{} <type> \DO{}
+  \gnewline{} <extensionMember>* \END{}
+
+<extensionMember> ::= <fieldDeclaration>
+  \alt <functionDeclaration>
+  \alt <operatorDeclaration>
+  \alt <propertyDeclaration>
+  \alt <conversionDeclaration>
+\end{grammar}
+
+\section{Modules}
+\LMLabel{modules}
+
+\LMHash{}%
+An import declaration names a module path as a qualified name, with an
+optional brace-enclosed list of imported members.
+Visibility is either \code{public} or \code{private}.
+
+\begin{grammar}
+<importDeclaration> ::= \IMPORT{} <qualifiedName>
+  \gnewline{} (`::' `{' <importList> `}')? <statementTerminator>
+
+<importList> ::= <identifier> (`,' <identifier>)*
+
+<visibilityModifier> ::= \PUBLIC{}
+  \alt \PRIVATE{}
+\end{grammar}
+
+\section{Module Initialization}
+\LMLabel{moduleInitialization}
+
+\LMHash{}%
+An init block runs once when its module is initialized.
+
+\begin{grammar}
+<initBlock> ::= \INIT{} <block>
+\end{grammar}
+
+\section{Attributes}
+\LMLabel{attributes}
+
+\LMHash{}%
+Attributes (annotations) attach metadata to a top-level declaration.
+Each argument is an expression or a \code{name: expression} pair.
+
+\begin{grammar}
+<attribute> ::= `@' <identifier> (`(' <attributeArguments>? `)')?
+
+<attributeArguments> ::= <attributeArgument> (`,' <attributeArgument>)*
+
+<attributeArgument> ::= <expression>
+  \alt <identifier> `:' <expression>
+
+<attributedDeclaration> ::= <attribute>* <topLevelDeclaration>
+\end{grammar}
+
+\section{Top-Level Declarations}
+\LMLabel{topLevelDeclarations}
+
+\LMHash{}%
+A source file is built from the declarations below.
+Attributes and module initialization blocks attach to (respectively
+accompany) these forms.
+
+\begin{grammar}
+<topLevelDeclaration> ::= <functionDeclaration>
+  \alt <classDeclaration>
+  \alt <structDeclaration>
+  \alt <traitDeclaration>
+  \alt <enumDeclaration>
+  \alt <typedefDeclaration>
+  \alt <distinctDeclaration>
+  \alt <extensionDeclaration>
+  \alt <importDeclaration>
+  \alt <constantDeclaration>
+  \alt <variableDeclaration>
+  \alt <attributedDeclaration>
+\end{grammar}
+
+\section{Foreign Function Interface}
+\LMLabel{ffi}
+
+\LMHash{}%
+An extern declaration binds foreign functions, structs, enums and
+constants from a named foreign module.
+Extern members are always public: an explicit \code{public} modifier
+on a member is accepted and ignored, \code{private} is rejected.
+No visibility is stored --- nothing gates on extern visibility.
+
+\begin{grammar}
+<externDeclaration> ::= <visibilityModifier>? \EXTERN{} <stringLiteral>
+  \gnewline{} \FROM{} <stringLiteral> \DO{} <externMember>* \END{}
+
+<externMember> ::= <externFunction>
+  \alt <externStruct>
+  \alt <externEnum>
+  \alt <externConstant>
+
+<externFunction> ::= <type> <identifier>
+  \gnewline{} `(' <externParameterList>? `)' <statementTerminator>
+
+<externParameterList> ::= (<externParameter> (`,' <externParameter>)*)?
+  \gnewline{} (`,' `...')? | `...'
+
+<externParameter> ::= `...'? <type>? <identifier>
+  \alt `...'
+\end{grammar}
+
+\commentary{%
+  Bare \code{...} covers C varargs like
+  \code{printf(string fmt, ...)}; \code{...int vda} yields
+  \code{vda: int[]}.%
+}
+
+\begin{grammar}
+<externStruct> ::= \STRUCT{} <identifier>
+  \gnewline{} (\HAS{} <externField>* \END{})?
+
+<externField> ::= <type> <identifier> <statementTerminator>
+
+<externEnum> ::= \ENUM{} <identifier> \HAS{} <enumVariant>* \END{}
+
+<externConstant> ::= \CONST{} <type> <identifier> <statementTerminator>
+\end{grammar}
+
+\section{Program Entry}
+\LMLabel{programEntry}
+
+\LMHash{}%
+A program starts in one of the two \code{main} forms below.
+
+\begin{grammar}
+<mainFunction> ::= \VOID{} `main' `(' `)' <block>
+  \alt \INT{} `main' `(' \code{string} `[' `]' `args' `)' <block>
+\end{grammar}
+
+\commentary{%
+  The second form receives its command-line arguments as
+  \code{string[] args}; the EBNF terminal \code{"string[]"} denotes the
+  three-character type suffix form, not a distinct keyword.%
+}
+
+\section{Special Names}
+\LMLabel{specialNames}
+
+\LMHash{}%
+\code{this}, \code{super} and \code{Self} have special meaning and
+cannot be used as ordinary identifiers in the positions where the
+grammar expects them.
+
+\begin{grammar}
+<specialName> ::= \THIS{}
+  \alt \SUPER{}
+  \alt \SELF{}
+\end{grammar}
+
+\section{Identifier Reference}
+\LMLabel{identifierReference}
+
+\LMHash{}%
+An \Index{identifier reference} is an occurrence of \synt{identifier}
+that refers to a declaration in scope.
+Reserved words (\ref{reservedWords}) cannot be used as identifiers.
+The contextual words \code{get}, \code{set}, \code{has},
+\code{end}, \code{convert}, \code{to}, \code{extend}, \code{from},
+\code{initialize} and \code{Self} are only special in the syntactic
+positions given by the grammar; elsewhere they are ordinary
+identifiers.
+
+\section{Reference}
+\LMLabel{reference}
+
+\subsection{Lexical Rules}
+\LMLabel{lexicalRules}
+
+\LMHash{}%
+Hella source text is represented as a sequence of Unicode code points.
+This sequence is first converted into a sequence of tokens
+according to the lexical rules given in this specification.
+At any point in the tokenization process,
+the longest possible token is recognized.
+
+\commentary{%
+  This section collects the lexical productions (upper-case names)
+  alongside the syntactic productions above, in the Reference chapter.%
+}
+
+\begin{grammar}
+<CHARACTER> ::= \gtilde(`\sq' | `\\r' | `\\n')
+
+<STRING\_CHARACTER> ::= \gtilde(`"' | `\\' | `\\r' | `\\n')
+
+<MULTILINE\_CHARACTER> ::= \gtilde(`\\r' | `\\n')
+
+<RAW\_STRING\_CHARACTER> ::= \gtilde(`"' | `\\r' | `\\n')
+
+<ANY\_CHARACTER> ::= \gtilde(`\\r' | `\\n') | <LINE\_BREAK>
+
+<LINE\_BREAK> ::= <LINE\_FEED> | <CARRIAGE\_RETURN\_LINE\_FEED>
+  \alt <CARRIAGE\_RETURN>
+
+<LINE\_FEED> ::= `\\n'
+
+<CARRIAGE\_RETURN> ::= `\\r'
+
+<CARRIAGE\_RETURN\_LINE\_FEED> ::= `\\r' `\\n'
+\end{grammar}
+
+\commentary{%
+  The EBNF terminals \code{LF}, \code{CRLF}, \code{CR},
+  \code{any-character} and \code{any-character-except-newline} are primitive
+  lexical tokens. The single underscore in \code{identifier},
+  \code{CHARACTER} string content and \code{RAW} strings is written
+  \code{`_'} (the lexical rule for identifiers above uses \code{`_'} for the underscore).%
+}
+
+\printindex
+\end{document}
