@@ -1,5 +1,5 @@
 % Hella Programming Language Specification
-% Source grammar: hella/references/ebnf-0.1.txt (Draft 0.2).
+% Source grammar: hella/references/ebnf-0.1.txt (Draft 0.3).
 \documentclass[makeidx]{article}
 \usepackage{xspace}
 \usepackage{epsfig}
@@ -16,7 +16,7 @@
 \usepackage{tocloft}
 \makeindex
 \title{Hella Programming Language Specification\\
-{\large Draft 0.2 --- EBNF 0.1}}
+{\large Draft 0.3 --- EBNF 0.1}}
 \author{Hassan Qasemi}
 
 \begin{document}
@@ -187,7 +187,8 @@ Hella is a statically typed, class-based language with structs, traits,
 enums, extensions, generics with \code{where} constraints, closures,
 pattern matching with \code{match}, ranges, nullable and pointer/slice
 type modifiers, fixed-size arrays (\code{arr}), growable vectors
-(\code{vec}), and \code{K:V} maps.
+(\code{vec}), \code{K:V} maps, and owning heap pointers (\code{own T}
+with \code{new} construction and \code{delete} destruction).
 Programs are organized as source files containing top-level declarations
 and optional module initialization blocks (\ref{sourceFiles},
 \ref{moduleInitialization}).
@@ -200,13 +201,15 @@ about a library or program at the point
 where it is known to have a compile-time error.
 
 \commentary{%
-  Change log carried over from the source EBNF (Draft 0.2, Phase 5 fixes):
+  Change log carried over from the source EBNF (Draft 0.3, Phase 5 fixes
+  plus own-heap phase 1):
   accessors public by default, separate \code{get}/\code{set} merging,
   \code{open} class-only, omitted \code{Type} in \code{has} literals,
   \code{|}/\code{or} alternative chains plus tuple-pattern \code{(a,b)}
   in \code{match}, \code{arr}/\code{vec} type forms, array literals
   \code{[1,2,3]}, empty \code{vec[]}, \code{K:V} map types plus
-  \code{has k: v end} map literals.%
+  \code{has k: v end} map literals, \code{own T} owning heap pointers
+  with \code{new} construction and \code{delete} destruction.%
 }
 
 \begin{hellaCode}
@@ -276,14 +279,14 @@ Keywords are reserved and cannot be used as identifiers.
 <KEYWORD> ::= \gnewline{}
   \AND{} | \ANY{} | \ARR{} | \ASSERT{} | \BOOL{} | \BREAK{} | \CLASS{}
   \alt\hspace{-3mm} \CONST{} | \CONTINUE{} | \DEBUGASSERT{} | \DEFER{}
-    | \DISTINCT{} | \DO{} | \DOUBLE{}
+    | \DELETE{} | \DISTINCT{} | \DO{} | \DOUBLE{}
   \alt\hspace{-3mm} \ELSE{} | \ENUM{} | \EXPLICIT{} | \EXTENDS{}
     | \EXTERN{} | \FLOAT{} | \FOR{}
   \alt\hspace{-3mm} \FUNCTION{} | \IF{} | \IMPLEMENTS{} | \IMPORT{}
     | \IN{} | \INIT{} | \INT{}
-  \alt\hspace{-3mm} \IS{} | \LOOP{} | \MATCH{} | \NOT{} | \NULL{}
+  \alt\hspace{-3mm} \IS{} | \LOOP{} | \MATCH{} | \NEW{} | \NOT{} | \NULL{}
     | \OPEN{} | \OPERATOR{}
-  \alt\hspace{-3mm} \OR{} | \OUT{} | \OVERRIDE{} | \PRIVATE{}
+  \alt\hspace{-3mm} \OR{} | \OUT{} | \OWN{} | \OVERRIDE{} | \PRIVATE{}
     | \PUBLIC{} | \REF{} | \RETURN{}
   \alt\hspace{-3mm} \SEALED{} | \STATIC{} | \STRING{} | \STRUCT{}
     | \SUPER{} | \THIS{} | \TRAIT{}
@@ -296,16 +299,16 @@ before the rule for \synt{identifier}
 (\ref{identifierReference}).
 
 \commentary{%
-  The EBNF keyword list contains exactly 56 entries:
+  The EBNF keyword list contains exactly 57 entries:
   \code{and}, \code{any}, \code{arr}, \code{assert}, \code{bool},
   \code{break}, \code{class}, \code{const}, \code{continue},
-  \code{debug\_assert}, \code{defer}, \code{distinct}, \code{do},
+  \code{debug\_assert}, \code{defer}, \code{delete}, \code{distinct}, \code{do},
   \code{double}, \code{else}, \code{enum}, \code{extends},
   \code{explicit}, \code{extern}, \code{float}, \code{for},
   \code{function}, \code{if}, \code{implements}, \code{import},
   \code{in}, \code{init}, \code{int}, \code{is}, \code{loop},
-  \code{match}, \code{not}, \code{null}, \code{open}, \code{operator},
-  \code{or}, \code{out}, \code{override}, \code{private}, \code{public},
+  \code{match}, \code{new}, \code{not}, \code{null}, \code{open}, \code{operator},
+  \code{or}, \code{out}, \code{own}, \code{override}, \code{private}, \code{public},
   \code{ref}, \code{return}, \code{sealed}, \code{static}, \code{string},
   \code{struct}, \code{super}, \code{this}, \code{trait}, \code{typedef},
   \code{void}, \code{vec}, \code{while}, \code{where}.
@@ -517,6 +520,7 @@ and slice/array view (\code{[]} ).
   \alt <fixedArrayType>
   \alt <vectorType>
   \alt <mapType>
+  \alt <ownType>
   \alt <parenthesizedType>
 
 <primitiveType> ::= \INT{} | \BOOL{} | \FLOAT{} | \DOUBLE{}
@@ -571,6 +575,17 @@ from the \code{where} constraint colon.
 
 \begin{grammar}
 <mapType> ::= <type> `:' <type>
+\end{grammar}
+
+\LMHash{}%
+An owning heap pointer is written \code{own T}: it moves on assignment,
+argument passing and return, \code{null} never flows into it,
+\code{delete} destroys it early and poisons the slot, and scope exit
+destroys any remaining live \code{own} slot. In phase 1 \code{own} never
+nests inside other types and \code{own} fields and globals are rejected.
+
+\begin{grammar}
+<ownType> ::= \OWN{} <type>
 \end{grammar}
 
 \commentary{%
@@ -743,6 +758,7 @@ Indexing selects an element or a range (\code{..}, \code{..=}).
   \alt <arrayLiteral>
   \alt <emptyVector>
   \alt <mapLiteral>
+  \alt <newExpression>
   \alt <parenthesizedExpression>
 
 <identifierExpression> ::= <identifier>
@@ -875,7 +891,15 @@ or constructor-less class (not \code{any}). In
 <structExpression> ::= <type>? \HAS{} <structFieldInitializer>* \END{}
 
 <structFieldInitializer> ::= <identifier> `=' <expression> <statementTerminator>
+
+<newExpression> ::= \NEW{} <type> `(' <argumentList>? `)'
 \end{grammar}
+
+\LMHash{}%
+Heap construction \code{new Type(args)} allocates a fresh heap object,
+runs the constructor on it, and yields an owning value.
+The result must be stored into an \code{own T} slot; a bare
+\code{new} in an expression-statement position leaks and is rejected.
 
 \section{Enum Variant Construction}
 \LMLabel{enumVariants}
@@ -896,7 +920,7 @@ arguments, optionally qualified by the enum type name.
 
 \LMHash{}%
 A statement is an expression statement, a declaration, a control-flow
-statement, an assertion, or a block.
+statement, an assertion, a heap-destruction statement, or a block.
 A statement terminator is a newline or a semicolon.
 
 \begin{grammar}
@@ -914,6 +938,7 @@ A statement terminator is a newline or a semicolon.
   \alt <continueStatement>
   \alt <returnStatement>
   \alt <deferStatement>
+  \alt <deleteStatement>
   \alt <assertStatement>
   \alt <block>
 
@@ -1021,7 +1046,15 @@ scope exits.
 
 \begin{grammar}
 <deferStatement> ::= \DEFER{} (<expression> <statementTerminator> | <block>)
+
+<deleteStatement> ::= \DELETE{} <expression> <statementTerminator>
 \end{grammar}
+
+\LMHash{}%
+A delete statement destroys the owning heap value denoted by its operand
+early and poisons the slot. The operand must be an \code{own T} slot
+(an identifier); \code{delete this} and non-identifier operands are
+rejected.
 
 \section{Assertions}
 \LMLabel{assertions}
