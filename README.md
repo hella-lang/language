@@ -1,7 +1,7 @@
 # Hella Language Specification
 
 `hellaLangSpec.tex` presents
-[`hella/references/ebnf-0.1.txt`](../hella/references/ebnf-0.1.txt)
+[`hella/references/ebnf-0.1.txt`](https://github.com/hella-lang/hella/blob/main/references/ebnf-0.1.txt)
 (Draft 0.3) as a typeset language specification document.
 Only the pieces needed to build the PDF are included:
 
