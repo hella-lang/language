@@ -1,5 +1,7 @@
 % Hella Programming Language Specification
-% Source grammar: hella/references/ebnf-0.1.txt (Draft 0.3).
+% Source grammar: hella/references/ebnf-0.1.txt (Draft 0.4: EBNF 0.1
+% plus the async extension: `async' functions, `task<T>', `await',
+% `spawn', `scope do ... end', `yield').
 \documentclass[makeidx]{article}
 \usepackage{xspace}
 \usepackage{epsfig}
@@ -16,7 +18,7 @@
 \usepackage{tocloft}
 \makeindex
 \title{Hella Programming Language Specification\\
-{\large Draft 0.3 --- EBNF 0.1}}
+{\large Draft 0.4 --- EBNF 0.1 plus async}}
 \author{Hassan Qasemi}
 
 \begin{document}
@@ -187,8 +189,11 @@ Hella is a statically typed, class-based language with structs, traits,
 enums, extensions, generics with \code{where} constraints, closures,
 pattern matching with \code{match}, ranges, nullable and pointer/slice
 type modifiers, fixed-size arrays (\code{arr}), growable vectors
-(\code{vec}), \code{K:V} maps, and owning heap pointers (\code{own T}
-with \code{new} construction and \code{delete} destruction).
+(\code{vec}), \code{K:V} maps, owning heap pointers (\code{own T}
+with \code{new} construction and \code{delete} destruction), and
+structured-concurrency async functions (\code{async} bodies returning
+\code{task<T>} handles consumed by \code{await} or produced by
+\code{spawn} inside \code{scope} blocks, with \code{yield} checkpoints).
 Programs are organized as source files containing top-level declarations
 and optional module initialization blocks (\ref{sourceFiles},
 \ref{moduleInitialization}).
@@ -201,15 +206,24 @@ about a library or program at the point
 where it is known to have a compile-time error.
 
 \commentary{%
-  Change log carried over from the source EBNF (Draft 0.3, Phase 5 fixes
-  plus own-heap phase 1):
+  Change log carried over from the source EBNF (Draft 0.4: EBNF 0.1
+  Phase 5 fixes plus own-heap phase 1 plus the async extension):
   accessors public by default, separate \code{get}/\code{set} merging,
   \code{open} class-only, omitted \code{Type} in \code{has} literals,
   \code{|}/\code{or} alternative chains plus tuple-pattern \code{(a,b)}
   in \code{match}, \code{arr}/\code{vec} type forms, array literals
   \code{[1,2,3]}, empty \code{vec[]}, \code{K:V} map types plus
   \code{has k: v end} map literals, \code{own T} owning heap pointers
-  with \code{new} construction and \code{delete} destruction.%
+  with \code{new} construction and \code{delete} destruction,
+  \code{async} functions with \code{task<T>} handles, prefix
+  \code{await}/\code{spawn} expressions, \code{scope} blocks and
+  \code{yield} checkpoints (\ref{asyncFunctions}). The \code{=} form
+  of attribute arguments and conditional compilation with \code{@cfg}
+  (\ref{conditionalCompilation}) are also specified. Extern parameters
+  may carry \code{ref}/\code{out} modes for C out-parameters
+  (\ref{ffi}). Interpolation in
+  strings is written with single braces (not with a dollar prefix),
+  and doubled braces denote literal brace characters.%
 }
 
 \begin{hellaCode}
@@ -277,7 +291,8 @@ Keywords are reserved and cannot be used as identifiers.
 
 \begin{grammar}
 <KEYWORD> ::= \gnewline{}
-  \AND{} | \ANY{} | \ARR{} | \ASSERT{} | \BOOL{} | \BREAK{} | \CLASS{}
+  \AND{} | \ANY{} | \ARR{} | \ASSERT{} | \ASYNC{} | \AWAIT{} | \BOOL{}
+    | \BREAK{} | \CLASS{}
   \alt\hspace{-3mm} \CONST{} | \CONTINUE{} | \DEBUGASSERT{} | \DEFER{}
     | \DELETE{} | \DISTINCT{} | \DO{} | \DOUBLE{}
   \alt\hspace{-3mm} \ELSE{} | \ENUM{} | \EXPLICIT{} | \EXTENDS{}
@@ -287,10 +302,11 @@ Keywords are reserved and cannot be used as identifiers.
   \alt\hspace{-3mm} \IS{} | \LOOP{} | \MATCH{} | \NEW{} | \NOT{} | \NULL{}
     | \OPEN{} | \OPERATOR{}
   \alt\hspace{-3mm} \OR{} | \OUT{} | \OWN{} | \OVERRIDE{} | \PRIVATE{}
-    | \PUBLIC{} | \REF{} | \RETURN{}
-  \alt\hspace{-3mm} \SEALED{} | \STATIC{} | \STRING{} | \STRUCT{}
+    | \PUBLIC{} | \REF{} | \RETURN{} | \SCOPE{}
+  \alt\hspace{-3mm} \SEALED{} | \SPAWN{} | \STATIC{} | \STRING{} | \STRUCT{}
     | \SUPER{} | \THIS{} | \TRAIT{}
   \alt\hspace{-3mm} \TYPEDEF{} | \VOID{} | \VEC{} | \WHILE{} | \WHERE{}
+    | \YIELD{}
 \end{grammar}
 
 \LMHash{}%
@@ -299,8 +315,9 @@ before the rule for \synt{identifier}
 (\ref{identifierReference}).
 
 \commentary{%
-  The EBNF keyword list contains exactly 57 entries:
-  \code{and}, \code{any}, \code{arr}, \code{assert}, \code{bool},
+  The EBNF keyword list contains exactly 62 entries:
+  \code{and}, \code{any}, \code{arr}, \code{assert}, \code{async},
+  \code{await}, \code{bool},
   \code{break}, \code{class}, \code{const}, \code{continue},
   \code{debug\_assert}, \code{defer}, \code{delete}, \code{distinct}, \code{do},
   \code{double}, \code{else}, \code{enum}, \code{extends},
@@ -309,12 +326,15 @@ before the rule for \synt{identifier}
   \code{in}, \code{init}, \code{int}, \code{is}, \code{loop},
   \code{match}, \code{new}, \code{not}, \code{null}, \code{open}, \code{operator},
   \code{or}, \code{out}, \code{own}, \code{override}, \code{private}, \code{public},
-  \code{ref}, \code{return}, \code{sealed}, \code{static}, \code{string},
+  \code{ref}, \code{return}, \code{scope}, \code{sealed}, \code{spawn},
+  \code{static}, \code{string},
   \code{struct}, \code{super}, \code{this}, \code{trait}, \code{typedef},
-  \code{void}, \code{vec}, \code{while}, \code{where}.
+  \code{void}, \code{vec}, \code{while}, \code{where}, \code{yield}.
   The words \code{get}, \code{set}, \code{has}, \code{end},
   \code{convert}, \code{to}, \code{extend}, \code{from},
-  \code{initialize} and \code{Self} are contextual, not reserved.%
+  \code{initialize} and \code{Self} are contextual, not reserved.
+  \code{task} is likewise not reserved: it is only special as the
+  \code{task<T>} type form (\ref{types}).%
 }
 
 \subsection{Comments and Whitespace}
@@ -417,7 +437,8 @@ or escape sequence enclosed in single quotes.
 A \Index{string literal} is a normal string, a multiline string,
 or a raw string.
 Normal and multiline strings support escape sequences
-and interpolation of the form \code{\${expression\}}.
+and interpolation of the form \code{\{expression\}}.
+Doubled braces denote literal brace characters.
 In a raw string no escapes or interpolations are processed.
 
 \begin{grammar}
@@ -445,7 +466,7 @@ In a raw string no escapes or interpolations are processed.
   \alt `\\' `x' <HEX\_DIGIT> <HEX\_DIGIT>
   \alt `\\' `u' <HEX\_DIGIT> <HEX\_DIGIT> <HEX\_DIGIT> <HEX\_DIGIT>
 
-<interpolation> ::= `${' <expression> `}'
+<interpolation> ::= `{' <expression> `}'
 
 <stringCharacter> ::= <STRING\_CHARACTER>
 
@@ -521,6 +542,7 @@ and slice/array view (\code{[]} ).
   \alt <vectorType>
   \alt <mapType>
   \alt <ownType>
+  \alt <taskType>
   \alt <parenthesizedType>
 
 <primitiveType> ::= \INT{} | \BOOL{} | \FLOAT{} | \DOUBLE{}
@@ -586,6 +608,18 @@ nests inside other types and \code{own} fields and globals are rejected.
 
 \begin{grammar}
 <ownType> ::= \OWN{} <type>
+\end{grammar}
+
+\LMHash{}%
+A pending asynchronous computation is written \code{task<T>}: it is the
+value produced by calling an \code{async} function or by \code{spawn}
+(\ref{asyncFunctions}). \code{await} consumes a \code{task<T>} handle
+exactly once and yields \code{T} (\code{task<void>} awaits to no
+value). \code{task} is not a user-declarable generic type: only the
+single-type-argument form is valid.
+
+\begin{grammar}
+<taskType> ::= \code{task} `<' <type> `>'
 \end{grammar}
 
 \commentary{%
@@ -690,10 +724,24 @@ ending in unary and postfix forms.
   \alt `\%'
 
 <unaryExpression> ::= <unaryOperator> <unaryExpression>
+  \alt <awaitExpression>
+  \alt <spawnExpression>
   \alt <postfixExpression>
+
+<awaitExpression> ::= \AWAIT{} <unaryExpression>
+
+<spawnExpression> ::= \SPAWN{} <unaryExpression>
 
 <unaryOperator> ::= `++' | `--' | `+' | `-' | `~' | \NOT{}
 \end{grammar}
+
+\LMHash{}%
+Prefix \code{await} and \code{spawn} bind at the unary level (like
+\code{not}), so \code{await a + b} requires parentheses around the
+addition. Both are only legal inside an \code{async} function body
+(\ref{asyncFunctions}): \code{await} consumes a \code{task<T>} handle
+exactly once, \code{spawn} additionally requires an enclosing
+\code{scope} block.
 
 \subsection{Postfix and Primary Expressions}
 \LMLabel{postfixExpressions}
@@ -939,6 +987,8 @@ A statement terminator is a newline or a semicolon.
   \alt <returnStatement>
   \alt <deferStatement>
   \alt <deleteStatement>
+  \alt <asyncScopeStatement>
+  \alt <yieldStatement>
   \alt <assertStatement>
   \alt <block>
 
@@ -1056,6 +1106,32 @@ early and poisons the slot. The operand must be an \code{own T} slot
 (an identifier); \code{delete this} and non-identifier operands are
 rejected.
 
+\LMHash{}%
+An async scope statement opens a structured-concurrency scope: tasks
+declared inside it must be awaited before \code{end}, and scope exit
+joins the remaining children (\ref{asyncFunctions}). It is only legal
+directly inside an \code{async} function body; nesting is allowed.
+
+\begin{grammar}
+<asyncScopeStatement> ::= \SCOPE{} <block>
+\end{grammar}
+
+\LMHash{}%
+A yield statement is a cooperative checkpoint inside an \code{async}
+body (\ref{asyncFunctions}). It is an \Error{compile-time error} to use
+\code{scope} or \code{yield} outside an \code{async} function body.
+
+\commentary{%
+  The source EBNF lists these as standalone \code{async-scope-statement}
+  and \code{yield-statement} productions without referencing them from
+  \code{statement}; they are presented here as statement alternatives,
+  which is how the implementation accepts them.%
+}
+
+\begin{grammar}
+<yieldStatement> ::= \YIELD{} <statementTerminator>?
+\end{grammar}
+
 \section{Assertions}
 \LMLabel{assertions}
 
@@ -1077,13 +1153,14 @@ An assertion checks its condition, with an optional message.
 A function declaration carries an optional visibility modifier,
 optional \code{static}, \code{sealed} and \code{override} modifiers,
 a return type, a name, optional generic parameters, a parameter list,
-an optional \code{where} clause, and a body which is either a block
+an optional \code{where} clause, an optional \code{async} marker
+(\ref{asyncFunctions}), and a body which is either a block
 or an \code{initialize} stub.
 
 \begin{grammar}
 <functionDeclaration> ::= <visibilityModifier>? \STATIC{}? \SEALED{}?
   \gnewline{} \OVERRIDE{}? <type> <identifier> <genericParameters>?
-  \gnewline{} `(' <parameterList>? `)' <whereClause>? <functionBody>
+  \gnewline{} `(' <parameterList>? `)' <whereClause>? \ASYNC{}? <functionBody>
 
 <functionBody> ::= <block>
   \alt \INITIALIZE{} <statementTerminator>
@@ -1106,6 +1183,44 @@ or an \code{initialize} stub.
   derives \code{vda: prev\_type[]} from the previous type and must be last;
   \code{...} may appear anywhere when an explicit type is present, e.g.
   \code{log(string fmt, ...string vda, bool cond)}.%
+}
+
+\subsection{Async Functions}
+\LMLabel{asyncFunctions}
+
+\LMHash{}%
+A function declaration may carry the \code{async} marker between its
+signature and its body: \code{ReturnType name(params) async do ... end}.
+An \code{async} body runs as its own task. Calling an \code{async}
+function from an \code{async} body yields a \code{task<Ret>} handle;
+\code{spawn} is the explicit form and additionally requires an
+enclosing \code{scope} block.
+
+\LMHash{}%
+Task handles are single-consumer and scope-bound: \code{await} consumes
+a handle exactly once (a second \code{await} of the same handle is an
+\Error{compile-time error}), and every task declared inside a
+\code{scope} block must be awaited before \code{end} (scope exit is the
+join point; an escaping task is an \Error{compile-time error}).
+Dropping a handle never detaches work. An unconsumed non-void task
+result at scope exit is diagnosed.
+
+\LMHash{}%
+It is an \Error{compile-time error} to call an \code{async} function
+from a synchronous body, and to use \code{await}, \code{spawn},
+\code{yield} or \code{scope} outside an \code{async} body.
+Arguments to a spawned child are transferred by value. An \code{async}
+\code{main} runs as the root task (\ref{programEntry}).
+
+\commentary{%
+  In version 1, \code{async} is supported on free functions only:
+  methods, trait signatures and function types remain synchronous, and
+  the async runtime is linked only when reachable async code requires
+  it, so synchronous programs gain no scheduler symbols or
+  dependencies. The standard library offers timer/yield helpers
+  (\code{yieldNow()}, \code{sleepMs(int)}, \code{cancelled()});
+  genuinely asynchronous I/O, channels, async closures and detached
+  tasks are future work.%
 }
 
 \section{Classes}
@@ -1336,7 +1451,8 @@ An init block runs once when its module is initialized.
 
 \LMHash{}%
 Attributes (annotations) attach metadata to a top-level declaration.
-Each argument is an expression or a \code{name: expression} pair.
+Each argument is an expression, a \code{name: expression} pair,
+or a \code{name = expression} pair.
 
 \begin{grammar}
 <attribute> ::= `@' <identifier> (`(' <attributeArguments>? `)')?
@@ -1345,9 +1461,47 @@ Each argument is an expression or a \code{name: expression} pair.
 
 <attributeArgument> ::= <expression>
   \alt <identifier> `:' <expression>
+  \alt <identifier> `=' <expression>
 
 <attributedDeclaration> ::= <attribute>* <topLevelDeclaration>
 \end{grammar}
+
+\subsection{Conditional Compilation}
+\LMLabel{conditionalCompilation}
+
+\LMHash{}%
+A \code{@cfg(...)} attribute keeps its item only when its condition
+holds. Evaluation happens during import expansion, before semantic
+analysis, so an absent item is invisible to name resolution, checking
+and code generation, and mutually exclusive declarations of the same
+name never collide.
+
+\LMHash{}%
+The version 1 conditions are: \code{os = "<name>"} for the host OS
+(\code{macos} \code{|} \code{linux} \code{|} \code{windows}),
+\code{target = "<triple>"} for the exact host triple,
+\code{debug} (true only for a debug link profile),
+\code{debug = false} (true only for release, check and LSP analysis),
+and the \code{unix} \code{|} \code{windows} OS-family shorthands.
+\code{or} (or \code{,}) joins conditions disjunctively: any true
+condition keeps the item. Stacked attributes are conjunctive: every
+\code{@cfg} must hold. There is no \code{and} or \code{not} in version
+1. Unknown conditions evaluate to false.
+
+\begin{grammar}
+<cfgCondition> ::= <identifier>
+  \alt <identifier> `=' (<stringLiteral> | `true' | `false')
+
+<cfgArguments> ::= <cfgCondition> ((`,' | \OR{}) <cfgCondition>)*
+\end{grammar}
+
+\commentary{%
+  \code{check}, \code{lint} and the language server evaluate with
+  \code{debug = false} so analysis never depends on the link profile.
+  The canonical formatter rewrites \code{or} as a comma (both mean
+  ``any of''); it never rewrites the author's \code{=} into \code{:}
+  or vice versa.%
+}
 
 \section{Top-Level Declarations}
 \LMLabel{topLevelDeclarations}
@@ -1366,11 +1520,18 @@ accompany) these forms.
   \alt <typedefDeclaration>
   \alt <distinctDeclaration>
   \alt <extensionDeclaration>
+  \alt <externDeclaration>
   \alt <importDeclaration>
   \alt <constantDeclaration>
   \alt <variableDeclaration>
   \alt <attributedDeclaration>
 \end{grammar}
+
+\commentary{%
+  The source EBNF omits \code{extern-declaration} from
+  \code{top-level-declaration}; it is included here because the
+  implementation accepts bare \code{extern} blocks at top level.%
+}
 
 \section{Foreign Function Interface}
 \LMLabel{ffi}
@@ -1397,14 +1558,24 @@ No visibility is stored --- nothing gates on extern visibility.
 <externParameterList> ::= (<externParameter> (`,' <externParameter>)*)?
   \gnewline{} (`,' `...')? | `...'
 
-<externParameter> ::= `...'? <type>? <identifier>
+<externParameter> ::= <parameterMode>? `...'? <type>? <identifier>
   \alt `...'
 \end{grammar}
+
+\LMHash{}%
+An extern parameter may carry a \code{ref} or \code{out} mode for C
+functions that write through a pointer (for example,
+\code{int rand\_s(ref int out)}): the call site passes the variable's
+address, exactly like a Hella \code{ref} parameter, and the mode is
+enforced against the call-site marker. A mode does not combine with
+\code{...}.
 
 \commentary{%
   Bare \code{...} covers C varargs like
   \code{printf(string fmt, ...)}; \code{...int vda} yields
-  \code{vda: int[]}.%
+  \code{vda: int[]}. The source EBNF does not yet list the
+  \code{ref}/\code{out} parameter mode; it is included here because the
+  implementation accepts and enforces it.%
 }
 
 \begin{grammar}
@@ -1432,7 +1603,11 @@ A program starts in one of the two \code{main} forms below.
 \commentary{%
   The second form receives its command-line arguments as
   \code{string[] args}; the EBNF terminal \code{"string[]"} denotes the
-  three-character type suffix form, not a distinct keyword.%
+  three-character type suffix form, not a distinct keyword.
+  Either form may carry the \code{async} marker (\ref{asyncFunctions}),
+  in which case it runs as the root task.
+  Independently of the return type, the implementation also accepts each
+  form with an empty parameter list or with \code{string[] args}.%
 }
 
 \section{Special Names}
