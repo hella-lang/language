@@ -1,7 +1,8 @@
 % Hella Programming Language Specification
-% Source grammar: hella/references/ebnf-0.1.txt (Draft 0.4: EBNF 0.1
+% Source grammar: hella/references/ebnf-0.1.txt (Draft 0.5: EBNF 0.1
 % plus the async extension: `async' functions, `task<T>', `await',
-% `spawn', `scope do ... end', `yield').
+% `spawn', `scope do ... end', `yield'; plus prefix address-of `&x'
+% and dereference `*p' with store-through assignment `*p = v').
 \documentclass[makeidx]{article}
 \usepackage{xspace}
 \usepackage{epsfig}
@@ -18,7 +19,7 @@
 \usepackage{tocloft}
 \makeindex
 \title{Hella Programming Language Specification\\
-{\large Draft 0.4 --- EBNF 0.1 plus async}}
+{\large Draft 0.5 --- EBNF 0.1 plus async, address-of/dereference}}
 \author{Hassan Qasemi}
 
 \begin{document}
@@ -603,8 +604,11 @@ from the \code{where} constraint colon.
 An owning heap pointer is written \code{own T}: it moves on assignment,
 argument passing and return, \code{null} never flows into it,
 \code{delete} destroys it early and poisons the slot, and scope exit
-destroys any remaining live \code{own} slot. In phase 1 \code{own} never
-nests inside other types and \code{own} fields and globals are rejected.
+destroys any remaining live \code{own} slot. Structures containing
+\code{own} fields are destroyed structurally (per-level member-chain
+auto-deref with poisoned moves), and \code{own} may appear in
+container elements and in globals, which are destroyed per element
+and at program end respectively.
 
 \begin{grammar}
 <ownType> ::= \OWN{} <type>
@@ -732,8 +736,19 @@ ending in unary and postfix forms.
 
 <spawnExpression> ::= \SPAWN{} <unaryExpression>
 
-<unaryOperator> ::= `++' | `--' | `+' | `-' | `~' | \NOT{}
+<unaryOperator> ::= `++' | `--' | `+' | `-' | `~' | `\&' | `*' | \NOT{}
 \end{grammar}
+
+\LMHash{}%
+Prefix \code{\&x} takes the address of a storage location as a
+\code{T*} pointer; prefix \code{*p} loads through a \code{T*} (or
+through an \code{own T} handle, which unwraps to its heap object).
+In prefix position both are unambiguous (\code{\&} is only infix at
+the bitwise-and level, \code{*} only at the multiplicative level).
+A dereference is a valid assignment target, so \code{*p = v} stores
+through the pointer with the pointee type. Loads respect width and
+signedness: an unsigned narrow pointee zero-extends, a signed one
+sign-extends.
 
 \LMHash{}%
 Prefix \code{await} and \code{spawn} bind at the unary level (like
@@ -1219,7 +1234,8 @@ Arguments to a spawned child are transferred by value. An \code{async}
   it, so synchronous programs gain no scheduler symbols or
   dependencies. The standard library offers timer/yield helpers
   (\code{yieldNow()}, \code{sleepMs(int)}, \code{cancelled()});
-  genuinely asynchronous I/O, channels, async closures and detached
+  blocking mutexes and channels live in the sync runtime alongside
+  them, while genuinely asynchronous I/O, async closures and detached
   tasks are future work.%
 }
 
